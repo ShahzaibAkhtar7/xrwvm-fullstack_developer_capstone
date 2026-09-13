@@ -9,9 +9,10 @@ import logging
 import json
 from django.views.decorators.csrf import csrf_exempt
 
-# Updated Imports for Car models and Populate script
+# Updated Imports for Car models, Populate script, and RestAPIs
 from .models import CarMake, CarModel
 from .populate import initiate
+from .restapis import get_request, analyze_review_sentiments, post_review
 
 # Get an instance of a logger
 logger = logging.getLogger(__name__)
@@ -99,6 +100,8 @@ def get_dealer_details(request, dealer_id):
     if(dealer_id):
         endpoint = "/fetchDealer/"+str(dealer_id)
         dealership = get_request(endpoint)
+        if isinstance(dealership, list) and len(dealership) > 0:
+            dealership = dealership[0]
         return JsonResponse({"status": 200, "dealer": dealership})
     else:
         return JsonResponse({"status": 400, "message": "Bad Request"})
@@ -109,15 +112,21 @@ def get_dealer_reviews(request, dealer_id):
     if(dealer_id):
         endpoint = "/fetchReviews/dealer/"+str(dealer_id)
         reviews = get_request(endpoint)
-        for review_detail in reviews:
-            response = analyze_review_sentiments(review_detail['review'])
-            review_detail['sentiment'] = response['sentiment']
+        if isinstance(reviews, list):
+            for review_detail in reviews:
+                if 'review' in review_detail:
+                    response = analyze_review_sentiments(review_detail['review'])
+                    if response and 'sentiment' in response:
+                        review_detail['sentiment'] = response['sentiment']
+                    else:
+                        review_detail['sentiment'] = 'neutral'
         return JsonResponse({"status": 200, "reviews": reviews})
     else:
         return JsonResponse({"status": 400, "message": "Bad Request"})
 
 
 # Add Review view
+@csrf_exempt
 def add_review(request):
     if(request.user.is_anonymous == False):
         data = json.loads(request.body)
